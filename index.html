@@ -38,8 +38,8 @@ let polygonLayer = L.layerGroup().addTo(map);
 // ---- MAIN FETCH ----
 async function fetchField(model, lat, lon, param) {
   const url =
+  const url =
   `https://test.estoniaweather.workers.dev/?endpoint=/latest/${param}/${lat},${lon}/json?model=${model}`;
-
 
   const r = await fetch(url);
   const j = await r.json();
