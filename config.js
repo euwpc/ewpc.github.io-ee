@@ -9,12 +9,12 @@ const ESTONIA_BOUNDS = [
 const CONFIG = {
 
   radar: {
-    url: "xx_px250-en-358-9_2025_11_15_945_2137.png",
+    url: "https://meteologix.com/ee/radar-hd/estonia/20251115-2147z.html",
     bounds: ESTONIA_BOUNDS
   },
 
   satellite: {
-    url: "xx_sat-en-358-9_2025_11_15_21_20_945_1426.png",
+    url: "https://meteologix.com/ee/satellite/estonia/satellite-cloud-tops-alert-10m-superhd/20251115-2130z.html",
     bounds: ESTONIA_BOUNDS
   },
 
