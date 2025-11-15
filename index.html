@@ -1,167 +1,116 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Estonia Weather Risk Map</title>
-
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- Leaflet Draw -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css">
-  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0e0e0e;
-      color: white;
-    }
-    #map {
-      height: 100vh;
-      width: 100vw;
-    }
-
-    #sidebar {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      background: rgba(22, 22, 22, 0.85);
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid #444;
-      backdrop-filter: blur(6px);
-      z-index: 1000;
-      width: 240px;
-    }
-
-    #sidebar h2 {
-      margin-top: 0;
-      font-size: 18px;
-      margin-bottom: 10px;
-    }
-
-    button, select {
-      width: 100%;
-      margin-bottom: 10px;
-      padding: 8px;
-      border-radius: 6px;
-      border: none;
-      font-size: 14px;
-    }
-  </style>
+<meta charset="utf-8">
+<title>Estonia Thunderstorm Outlook</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<style>
+  body { margin: 0; background: #0b0f14; color: white; font-family: Arial; }
+  #map { height: 100vh; width: 100vw; }
+  .legend { position: absolute; bottom: 20px; left: 20px; background:#111;padding:10px;border-radius:8px;}
+</style>
 </head>
 
 <body>
-
-<div id="sidebar">
-  <h2>Weather Layers (Estonia)</h2>
-
-  <select id="imageLayerSelect">
-    <option value="">None</option>
-    <option value="radar">Radar</option>
-    <option value="satellite">Satellite</option>
-    <option value="hail">Hail Size</option>
-    <option value="cape">CAPE</option>
-    <option value="srh">SRH</option>
-    <option value="3cape">3CAPE</option>
-  </select>
-
-  <h2>Draw Risk Area</h2>
-  <select id="riskType">
-    <option value="TSTM">TSTM</option>
-    <option value="MRGL">MRGL</option>
-    <option value="SLGT">SLGT</option>
-    <option value="ENH">ENH</option>
-    <option value="MDT">MDT</option>
-    <option value="HIGH">HIGH</option>
-  </select>
-</div>
-
 <div id="map"></div>
 
-<script src="config.js"></script>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
 
-// Initialize map centered on Estonia
-const map = L.map('map').setView([58.7, 25.3], 7);
+// ---- CONFIG ----
+const APIKEY = "YiJ7qDsFuV5j0ew_vDO76BT4Bo4yMILwhZF25a8mBap4A2H8J6zIG5kdJLpz7QtxcipY5xRe_btTtZTlBp33S1cZCx2TtiSz-nMihR_tWuUSAjV_9HIzQF-bn-UgSP-9w";
+const MODELS = ["ecmwf", "icon-eu", "harmonie-dmi", "swiss4x4"];
 
-// OSM layer
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap",
-  maxZoom: 14
-}).addTo(map);
-
-// Image overlay holder
-let overlay;
-
-// Handle layer switching
-document.getElementById("imageLayerSelect").addEventListener("change", e => {
-  const val = e.target.value;
-
-  if (overlay) map.removeLayer(overlay);
-
-  if (val && CONFIG[val]) {
-    overlay = L.imageOverlay(CONFIG[val].url, CONFIG[val].bounds, { opacity: 0.75 }).addTo(map);
-  }
-});
-
-// Risk colors (based on SPC style)
-const RISK_COLORS = {
-  "TSTM": "#5cb85c",
-  "MRGL": "#76af4f",
-  "SLGT": "#f7e463",
-  "ENH": "#ffa600",
-  "MDT": "#ff4700",
-  "HIGH": "#9900ff"
+const AREA = {
+  minLat: 57.3,
+  maxLat: 59.7,
+  minLon: 21.0,
+  maxLon: 28.3,
+  step: 0.1
 };
 
-// Draw control
-const editableLayers = new L.FeatureGroup();
-map.addLayer(editableLayers);
+// ---- MAP ----
+const map = L.map("map").setView([58.8, 25.3], 7);
 
-const drawControl = new L.Control.Draw({
-  draw: {
-    polygon: {
-      allowIntersection: false,
-      showArea: true,
-      shapeOptions: {
-        color: "#fff",
-        weight: 2
-      }
-    },
-    rectangle: false,
-    circle: false,
-    polyline: false,
-    marker: false
-  },
-  edit: {
-    featureGroup: editableLayers
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+let polygonLayer = L.layerGroup().addTo(map);
+
+// ---- MAIN FETCH ----
+async function fetchField(model, lat, lon, param) {
+  const url = 
+    `https://api.meteologix.com/latest/${param}/${lat},${lon}/json?model=${model}&apikey=${APIKEY}`;
+
+  const r = await fetch(url);
+  const j = await r.json();
+  return j.data[0].coordinates[0].dates[0].value;
+}
+
+// Fetch grid over Estonia
+async function fetchGrid() {
+  const grid = [];
+  for (let lat = AREA.minLat; lat <= AREA.maxLat; lat += AREA.step) {
+    const row = [];
+    for (let lon = AREA.minLon; lon <= AREA.maxLon; lon += AREA.step) {
+      const cape = await fetchField("ecmwf", lat, lon, "cape_ml:Jkg");
+      const shear = await fetchField("ecmwf", lat, lon, "wind_speed_shear_0_6km:ms");
+      const srh = await fetchField("ecmwf", lat, lon, "storm_relative_helicity_0_3km:ms2");
+      row.push({ lat, lon, cape, shear, srh });
+    }
+    grid.push(row);
   }
-});
+  return grid;
+}
 
-map.addControl(drawControl);
+// ---- CATEGORY LOGIC ----
+function category(c) {
+  if (c.cape > 2500 && c.shear > 30 && c.srh > 250) return "HIGH";
+  if (c.cape > 1800 && c.shear > 25 && c.srh > 200) return "MDT";
+  if (c.cape > 1200 && c.shear > 20 && c.srh > 150) return "ENH";
+  if (c.cape > 700 && c.shear > 15 && c.srh > 120) return "SLGT";
+  if (c.cape > 300 && c.shear > 10 && c.srh > 80) return "MRGL";
+  if (c.cape > 100) return "TSTM";
+  return null;
+}
 
-// When a polygon is drawn
-map.on(L.Draw.Event.CREATED, function (e) {
-  const layer = e.layer;
-  const risk = document.getElementById("riskType").value;
+const COLORS = {
+  TSTM: "#00b7ff",
+  MRGL: "#14ed00",
+  SLGT: "#ffde59",
+  ENH: "#ff9a00",
+  MDT: "#ff3b3b",
+  HIGH: "#b300ff"
+};
 
-  layer.setStyle({
-    color: RISK_COLORS[risk],
-    fillColor: RISK_COLORS[risk],
-    fillOpacity: 0.35,
-    weight: 2
+// ---- POLYGON CREATION ----
+function createPolygons(grid) {
+  polygonLayer.clearLayers();
+
+  grid.forEach(row => {
+    row.forEach(cell => {
+      const cat = category(cell);
+      if (!cat) return;
+
+      // Draw a rectangle cell as polygon
+      const poly = [
+        [cell.lat, cell.lon],
+        [cell.lat + AREA.step, cell.lon],
+        [cell.lat + AREA.step, cell.lon + AREA.step],
+        [cell.lat, cell.lon + AREA.step]
+      ];
+
+      L.polygon(poly, { color: COLORS[cat], fillOpacity: 0.35 })
+        .addTo(polygonLayer)
+        .bindPopup(`${cat}<br>CAPE: ${cell.cape}<br>Shear: ${cell.shear}<br>SRH: ${cell.srh}`);
+    });
   });
+}
 
-  layer.bindPopup(`${risk} Risk Area`);
-
-  editableLayers.addLayer(layer);
-});
-
+// ---- RUN ----
+(async () => {
+  const grid = await fetchGrid();
+  createPolygons(grid);
+})();
 </script>
 </body>
 </html>
