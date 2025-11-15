@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estonia Weather Risk Map</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Draw -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0e0e0e;
+      color: white;
+    }
+    #map {
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #sidebar {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(22, 22, 22, 0.85);
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #444;
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      width: 240px;
+    }
+
+    #sidebar h2 {
+      margin-top: 0;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    button, select {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 6px;
+      border: none;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="sidebar">
+  <h2>Weather Layers (Estonia)</h2>
+
+  <select id="imageLayerSelect">
+    <option value="">None</option>
+    <option value="radar">Radar</option>
+    <option value="satellite">Satellite</option>
+    <option value="hail">Hail Size</option>
+    <option value="cape">CAPE</option>
+    <option value="srh">SRH</option>
+    <option value="3cape">3CAPE</option>
+  </select>
+
+  <h2>Draw Risk Area</h2>
+  <select id="riskType">
+    <option value="TSTM">TSTM</option>
+    <option value="MRGL">MRGL</option>
+    <option value="SLGT">SLGT</option>
+    <option value="ENH">ENH</option>
+    <option value="MDT">MDT</option>
+    <option value="HIGH">HIGH</option>
+  </select>
+</div>
+
+<div id="map"></div>
+
+<script src="config.js"></script>
+<script>
+
+// Initialize map centered on Estonia
+const map = L.map('map').setView([58.7, 25.3], 7);
+
+// OSM layer
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap",
+  maxZoom: 14
+}).addTo(map);
+
+// Image overlay holder
+let overlay;
+
+// Handle layer switching
+document.getElementById("imageLayerSelect").addEventListener("change", e => {
+  const val = e.target.value;
+
+  if (overlay) map.removeLayer(overlay);
+
+  if (val && CONFIG[val]) {
+    overlay = L.imageOverlay(CONFIG[val].url, CONFIG[val].bounds, { opacity: 0.75 }).addTo(map);
+  }
+});
+
+// Risk colors (based on SPC style)
+const RISK_COLORS = {
+  "TSTM": "#5cb85c",
+  "MRGL": "#76af4f",
+  "SLGT": "#f7e463",
+  "ENH": "#ffa600",
+  "MDT": "#ff4700",
+  "HIGH": "#9900ff"
+};
+
+// Draw control
+const editableLayers = new L.FeatureGroup();
+map.addLayer(editableLayers);
+
+const drawControl = new L.Control.Draw({
+  draw: {
+    polygon: {
+      allowIntersection: false,
+      showArea: true,
+      shapeOptions: {
+        color: "#fff",
+        weight: 2
+      }
+    },
+    rectangle: false,
+    circle: false,
+    polyline: false,
+    marker: false
+  },
+  edit: {
+    featureGroup: editableLayers
+  }
+});
+
+map.addControl(drawControl);
+
+// When a polygon is drawn
+map.on(L.Draw.Event.CREATED, function (e) {
+  const layer = e.layer;
+  const risk = document.getElementById("riskType").value;
+
+  layer.setStyle({
+    color: RISK_COLORS[risk],
+    fillColor: RISK_COLORS[risk],
+    fillOpacity: 0.35,
+    weight: 2
+  });
+
+  layer.bindPopup(`${risk} Risk Area`);
+
+  editableLayers.addLayer(layer);
+});
+
+</script>
+</body>
+</html>
